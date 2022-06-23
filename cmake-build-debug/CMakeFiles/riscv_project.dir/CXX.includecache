@@ -1,0 +1,32 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/mnt/d/周秉霖/PPCA/riscv_project/function_lib.h
+
+/mnt/d/周秉霖/PPCA/riscv_project/get_code.h
+string
+-
+
+/mnt/d/周秉霖/PPCA/riscv_project/master.cpp
+iostream
+-
+cstdio
+-
+string
+-
+cmath
+-
+runner.h
+/mnt/d/周秉霖/PPCA/riscv_project/runner.h
+get_code.h
+/mnt/d/周秉霖/PPCA/riscv_project/get_code.h
+
+/mnt/d/周秉霖/PPCA/riscv_project/runner.h
+function_lib.h
+/mnt/d/周秉霖/PPCA/riscv_project/function_lib.h
+

@@ -1,0 +1,1 @@
+/usr/bin/c++  -g   CMakeFiles/riscv_project.dir/master.cpp.o  -o riscv_project 
