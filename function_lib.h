@@ -5,6 +5,7 @@
 #ifndef RISCV_PROJECT_FUNCTION_LIB_H
 #define RISCV_PROJECT_FUNCTION_LIB_H
 
+
 unsigned get_imm(const std::string &ins, int l, int r){
     unsigned res = 0;
     for(int i = l; i <= r; ++i){
@@ -13,13 +14,6 @@ unsigned get_imm(const std::string &ins, int l, int r){
     return res;
 }
 
-unsigned get_rd(const std::string &ins, int l, int r){
-    unsigned res = 0;
-    for(int i = l; i <= r; ++i){
-        res = (res << 1) + ins[i] - '0';
-    }
-    return res;
-}
 
 unsigned read_one_char(int index, unsigned mem[]){//在index位读一个字节
     int memPos = index >> 2;
@@ -97,352 +91,298 @@ inline unsigned sign_extend(const unsigned &x, const int &cur_len, const int &de
 
 
 
-void LUI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned imm = get_imm(ins, 31 - 31, 31 - 12), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = imm << 12;
-    ++pos;
+void LUI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    unsigned imm = get_imm(o.ins, 31 - 31, 31 - 12);
+    o.rd = imm << 12;
 }
 
-void AUIPC(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned imm = get_imm(ins, 31 - 31, 31 - 12), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = (imm << 12) + (pos << 2);
-    ++pos;
+void AUIPC(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    unsigned imm = get_imm(o.ins, 31 - 31, 31 - 12);
+    o.rd = (imm << 12) + (o.pc << 2);
 }
 
-void JAL(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7), off = get_imm(ins, 0, 0);
-    off = (off << 8) + get_imm(ins, 31 - 19,  31- 12);
-    off = (off << 1) + get_imm(ins, 31 - 20, 31 - 20);
-    off = (off << 10) + get_imm(ins, 1, 10);
+void JAL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    unsigned off = get_imm(o.ins, 0, 0);
+    off = (off << 8) + get_imm(o.ins, 31 - 19,  31- 12);
+    off = (off << 1) + get_imm(o.ins, 31 - 20, 31 - 20);
+    off = (off << 10) + get_imm(o.ins, 1, 10);
     off <<= 1;
-    reg[rdx] = (pos + 1) << 2;
+    o.rd = (o.pc + 1) << 2;
     off = sign_extend(off, 21);
-    pos = ((pos << 2) + off) >> 2;
+    nxt_pos = ((o.pc << 2) + off) >> 2;
 }
 
-void JALR(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned t = (pos + 1) << 2, off = get_imm(ins, 0, 11);
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
+void JALR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    unsigned t = (o.pc + 1) << 2, off = get_imm(o.ins, 0, 11);
     if(off >> 11) off |= 0xfffff000;
-    pos = ((reg[rdx1] + off) & (~1)) >> 2;
-    reg[rdx] = t;
+    nxt_pos = ((o.rd1 + off) & (~1)) >> 2;
+    o.rd = t;
 }
 
-void BEQ(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx2 = get_rd(ins, 31 - 24, 31 - 20), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
-    if(reg[rdx1] == reg[rdx2]){
-        unsigned off = get_imm(ins, 0, 0);
-        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
-        off = (off << 6) + get_imm(ins, 1, 6);
-        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+void BEQ(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    if(o.rd1 == o.rd2){
+        unsigned off = get_imm(o.ins, 0, 0);
+        off = (off << 1) + get_imm(o.ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(o.ins, 1, 6);
+        off = (off << 4) + get_imm(o.ins, 31 - 11, 31 - 8);
         off <<= 1;
         if(off >> 12) off |= 0xffffe000;
-        pos = ((pos << 2) + off) >> 2;
-    }
-    else{
-        ++pos;
+        nxt_pos = ((o.pc << 2) + off) >> 2;
     }
 }
 
-void BNE(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx2 = get_rd(ins, 31 - 24, 31 - 20), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
-    if(reg[rdx1] != reg[rdx2]){
-        unsigned off = get_imm(ins, 0, 0);
-        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
-        off = (off << 6) + get_imm(ins, 1, 6);
-        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+void BNE(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    if(o.rd1 != o.rd2){
+        unsigned off = get_imm(o.ins, 0, 0);
+        off = (off << 1) + get_imm(o.ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(o.ins, 1, 6);
+        off = (off << 4) + get_imm(o.ins, 31 - 11, 31 - 8);
         off <<= 1;
         if(off >> 12) off |= 0xffffe000;
-        pos = ((pos << 2) + off) >> 2;
-    }
-    else{
-        ++pos;
+        nxt_pos = ((o.pc << 2) + off) >> 2;
     }
 }
 
-void BLT(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx2 = get_rd(ins, 31 - 24, 31 - 20), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
-    if((int)reg[rdx1] < (int)reg[rdx2]){
-        unsigned off = get_imm(ins, 0, 0);
-        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
-        off = (off << 6) + get_imm(ins, 1, 6);
-        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+void BLT(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    if((int)o.rd1 < (int)o.rd2){
+        unsigned off = get_imm(o.ins, 0, 0);
+        off = (off << 1) + get_imm(o.ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(o.ins, 1, 6);
+        off = (off << 4) + get_imm(o.ins, 31 - 11, 31 - 8);
         off <<= 1;
         if(off >> 12) off |= 0xffffe000;
-        pos = ((pos << 2) + off) >> 2;
-    }
-    else{
-        ++pos;
+        nxt_pos = ((o.pc << 2) + off) >> 2;
     }
 }
 
-void BGE(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx2 = get_rd(ins, 31 - 24, 31 - 20), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
-    if((int)reg[rdx1] >= (int)reg[rdx2]){
-        unsigned off = get_imm(ins, 0, 0);
-        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
-        off = (off << 6) + get_imm(ins, 1, 6);
-        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+void BGE(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    if((int)o.rd1 >= (int)o.rd2){
+        unsigned off = get_imm(o.ins, 0, 0);
+        off = (off << 1) + get_imm(o.ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(o.ins, 1, 6);
+        off = (off << 4) + get_imm(o.ins, 31 - 11, 31 - 8);
         off <<= 1;
         if(off >> 12) off |= 0xffffe000;
-        pos = ((pos << 2) + off) >> 2;
-    }
-    else{
-        ++pos;
+        nxt_pos = ((o.pc << 2) + off) >> 2;
     }
 }
 
-void BLTU(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx2 = get_rd(ins, 31 - 24, 31 - 20), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
-    if(reg[rdx1] < reg[rdx2]){
-        unsigned off = get_imm(ins, 0, 0);
-        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
-        off = (off << 6) + get_imm(ins, 1, 6);
-        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+void BLTU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    if(o.rd1 < o.rd2){
+        unsigned off = get_imm(o.ins, 0, 0);
+        off = (off << 1) + get_imm(o.ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(o.ins, 1, 6);
+        off = (off << 4) + get_imm(o.ins, 31 - 11, 31 - 8);
         off <<= 1;
         if(off >> 12) off |= 0xffffe000;
-        pos = ((pos << 2) + off) >> 2;
-    }
-    else{
-        ++pos;
+        nxt_pos = ((o.pc << 2) + off) >> 2;
     }
 }
 
-void BGEU(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx2 = get_rd(ins, 31 - 24, 31 - 20), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
-    if(reg[rdx1] >= reg[rdx2]){
-        unsigned off = get_imm(ins, 0, 0);
-        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
-        off = (off << 6) + get_imm(ins, 1, 6);
-        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+void BGEU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    if(o.rd1 >= o.rd2){
+        unsigned off = get_imm(o.ins, 0, 0);
+        off = (off << 1) + get_imm(o.ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(o.ins, 1, 6);
+        off = (off << 4) + get_imm(o.ins, 31 - 11, 31 - 8);
         off <<= 1;
         if(off >> 12) off |= 0xffffe000;
-        pos = ((pos << 2) + off) >> 2;
-    }
-    else{
-        ++pos;
+        nxt_pos = ((o.pc << 2) + off) >> 2;
     }
 }
 
-void LB(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned off = get_imm(ins, 0, 11);
+void LB(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned off = get_imm(o.ins, 0, 11);
     if(off >> 11) off |= 0xfffff000;
-    unsigned rans = read_one_char(reg[rdx1] + off, mem);//8位
+    unsigned rans = read_one_char(o.rd1 + off, mem);//8位
     if(rans >> 7) rans |= 0xffffff00;
-    reg[rdx] = rans;
-    ++pos;
+    o.rd = rans;
 }
 
-void LH(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned off = get_imm(ins, 0, 11);
+void LH(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned off = get_imm(o.ins, 0, 11);
     if(off >> 11) off |= 0xfffff000;
-    unsigned rans = read_two_char(reg[rdx1] + off, mem);//16位
+    unsigned rans = read_two_char(o.rd1 + off, mem);//16位
     if(rans >> 15) rans |= 0xffff0000;
-    reg[rdx] = rans;
-    ++pos;
+    o.rd = rans;
 }
 
-void LW(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned off = get_imm(ins, 0, 11);
+void LW(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned off = get_imm(o.ins, 0, 11);
     if(off >> 11) off |= 0xfffff000;
-    unsigned rans = read_four_char(reg[rdx1] + off, mem);//32位
-    reg[rdx] = rans;
-    ++pos;
+    unsigned rans = read_four_char(o.rd1 + off, mem);//32位
+    o.rd = rans;
 }
 
-void LBU(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned off = get_imm(ins, 0, 11);
+void LBU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned off = get_imm(o.ins, 0, 11);
     if(off >> 11) off |= 0xfffff000;
-    unsigned rans = read_one_char(reg[rdx1] + off, mem);//8位
+    unsigned rans = read_one_char(o.rd1 + off, mem);//8位
     //rans <<= 24;
-    reg[rdx] = rans;
-    ++pos;
+    o.rd = rans;
 }
 
-void LHU(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned off = get_imm(ins, 0, 11);
+void LHU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned off = get_imm(o.ins, 0, 11);
     if(off >> 11) off |= 0xfffff000;
-    unsigned rans = read_two_char(reg[rdx1] + off, mem);//16位
+    unsigned rans = read_two_char(o.rd1 + off, mem);//16位
     //rans <<= 16;
-    reg[rdx] = rans;
-    ++pos;
+    o.rd = rans;
 }
 
-void SB(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned aimChar = reg[rdx2] & 0xff;
-    unsigned off = get_imm(ins, 31 - 31, 31 - 25);
+void SB(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    unsigned aimChar = o.rd2 & 0xff;
+    unsigned off = get_imm(o.ins, 31 - 31, 31 - 25);
     off <<= 5;
-    off += get_imm(ins, 31 - 11, 31 - 7);
+    off += get_imm(o.ins, 31 - 11, 31 - 7);
     if(off >> 11) off |= 0xfffff000;
-    write_one_char(aimChar, reg[rdx1] + off, mem);
-    ++pos;
+    write_one_char(aimChar, o.rd1 + off, mem);
 }
 
-void SH(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned aimChar = reg[rdx2] & 0xffff;
-    unsigned off = get_imm(ins, 31 - 31, 31 - 25);
+void SH(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    unsigned aimChar = o.rd2 & 0xffff;
+    unsigned off = get_imm(o.ins, 31 - 31, 31 - 25);
     off <<= 5;
-    off += get_imm(ins, 31 - 11, 31 - 7);
+    off += get_imm(o.ins, 31 - 11, 31 - 7);
     if(off >> 11) off |= 0xfffff000;
-    write_two_char(aimChar, reg[rdx1] + off, mem);
-    ++pos;
+    write_two_char(aimChar, o.rd1 + off, mem);
 }
 
-void SW(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned aimChar = reg[rdx2] & 0xffffffff;
-    unsigned off = get_imm(ins, 31 - 31, 31 - 25);
+void SW(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    unsigned aimChar = o.rd2 & 0xffffffff;
+    unsigned off = get_imm(o.ins, 31 - 31, 31 - 25);
     off <<= 5;
-    off += get_imm(ins, 31 - 11, 31 - 7);
+    off += get_imm(o.ins, 31 - 11, 31 - 7);
     if(off >> 11) off |= 0xfffff000;
-    write_four_char(aimChar, reg[rdx1] + off, mem);
-    ++pos;
+    write_four_char(aimChar, o.rd1 + off, mem);
 }
 
-void ADDI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned imm = get_imm(ins, 0, 11);//12位
+void ADDI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned imm = get_imm(o.ins, 0, 11);//12位
     if(imm >> 11) imm |= 0xfffff000;
-    reg[rdx] = imm + reg[rdx1];
-    ++pos;
+    o.rd = imm + o.rd1;
 }
 
-void SLTI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned imm = get_imm(ins, 0, 11);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
+void SLTI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    unsigned imm = get_imm(o.ins, 0, 11);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7), rdx1 = get_rd(o.ins, 31 - 19, 31 - 15);
     if(imm >> 11) imm |= 0xfffff000;
-    reg[rdx] = ((int)reg[rdx1] < (int)imm);
-    ++pos;
+    o.rd = ((int)o.rd1 < (int)imm);
 }
 
-void SLTIU(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned imm = get_imm(ins, 0, 11);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7), rdx1 = get_rd(ins, 31 - 19, 31 - 15);
+void SLTIU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    unsigned imm = get_imm(o.ins, 0, 11);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7), rdx1 = get_rd(o.ins, 31 - 19, 31 - 15);
     if(imm >> 11) imm |= 0xfffff000;
-    reg[rdx] = (reg[rdx1] < imm);
-    ++pos;
+    o.rd = (o.rd1 < imm);
 }
 
-void XORI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned imm = get_imm(ins, 0, 11);
+void XORI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
-    reg[rdx] = reg[rdx1] ^ imm;
-    ++pos;
+    o.rd = o.rd1 ^ imm;
 }
 
-void ORI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned imm = get_imm(ins, 0, 11);
+void ORI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
-    reg[rdx] = reg[rdx1] | imm;
-    ++pos;
+    o.rd = o.rd1 | imm;
 }
 
-void ANDI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned imm = get_imm(ins, 0, 11);
+void ANDI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
-    reg[rdx] = reg[rdx1] & imm;
-    ++pos;
+    o.rd = o.rd1 & imm;
 }
 
-void SLLI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){////shamt[5] == 0?
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned shamt = get_imm(ins, 31 - 25, 31 - 20);
-    reg[rdx] = reg[rdx1] << shamt;
-    ++pos;
+void SLLI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){////shamt[5] == 0?
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned shamt = get_imm(o.ins, 31 - 25, 31 - 20);
+    o.rd = o.rd1 << shamt;
 }
 
-void SRLI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned shamt = get_imm(ins, 31 - 25, 31 - 20);
-    reg[rdx] = reg[rdx1] >> shamt;
-    ++pos;
+void SRLI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned shamt = get_imm(o.ins, 31 - 25, 31 - 20);
+    o.rd = o.rd1 >> shamt;
 }
 
-void SRAI(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx = get_rd(ins, 31 - 11, 31 - 7);
-    unsigned shamt = get_imm(ins, 31 - 25, 31 - 20);
-    reg[rdx] = (int)reg[rdx1] >> shamt;
-    ++pos;
+void SRAI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    unsigned shamt = get_imm(o.ins, 31 - 25, 31 - 20);
+    o.rd = (int)o.rd1 >> shamt;
 }
 
-void ADD(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] + reg[rdx2];
-    ++pos;
+void ADD(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 + o.rd2;
 }
 
-void SUB(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] - reg[rdx2];
-    ++pos;
+void SUB(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 - o.rd2;
 }
 
-void SLL(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] << (reg[rdx2] & 0x1f);
-    ++pos;
+void SLL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 << (o.rd2 & 0x1f);
 }
 
-void SLT(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = (int)reg[rdx1] < (int)reg[rdx2] ? 1 : 0;
-    ++pos;
+void SLT(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = (int)o.rd1 < (int)o.rd2 ? 1 : 0;
 }
 
-void SLTU(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] < reg[rdx2] ? 1 : 0;
-    ++pos;
+void SLTU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 < o.rd2 ? 1 : 0;
 }
 
-void XOR(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] ^ reg[rdx2];
-    ++pos;
+void XOR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 ^ o.rd2;
 }
 
-void SRL(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] >> (reg[rdx2] & 0x1f);
-    ++pos;
+void SRL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 >> (o.rd2 & 0x1f);
 }
 
-void SRA(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = (int)reg[rdx1] >> (reg[rdx2] & 0x1f);
-    ++pos;
+void SRA(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = (int)o.rd1 >> (o.rd2 & 0x1f);
 }
 
-void OR(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] | reg[rdx2];
-    ++pos;
+void OR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 | o.rd2;
 }
 
-void AND(const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
-    unsigned rdx1 = get_rd(ins, 31 - 19, 31 - 15), rdx2 = get_rd(ins, 31 - 24, 31 - 20);
-    unsigned rdx = get_rd(ins, 31 - 11, 31 - 7);
-    reg[rdx] = reg[rdx1] & reg[rdx2];
-    ++pos;
+void AND(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
+    //unsigned rdx1 = get_rd(o.ins, 31 - 19, 31 - 15), rdx2 = get_rd(o.ins, 31 - 24, 31 - 20);
+    //unsigned rdx = get_rd(o.ins, 31 - 11, 31 - 7);
+    o.rd = o.rd1 & o.rd2;
 }
 
 

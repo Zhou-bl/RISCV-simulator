@@ -5,36 +5,11 @@
 #ifndef RISCV_PROJECT_RUNNER_H
 #define RISCV_PROJECT_RUNNER_H
 
-#include "function_lib.h"
+#include "order_class.h"
 
-std::string get_ins(unsigned in){
-    std::string res;
-    int tmp[32] = {0}, cnt = 0;
-    while(in){
-        tmp[cnt++] = in & 1;
-        in >>= 1;
-    }
-    for(int i = 31; i >= 0; --i)
-        res += tmp[i] + '0';
-    return res;
-}
+/*
 
-void decode(const std::string &ins, std::string &opCode, std::string &func3, std::string &func7){
-    //opCode:31-6 -> 31-0
-    //func3:31-14 -> 31-12
-    //func7:31-0 -> 31-25
-    for(int i = 31-6; i <= 31-0; ++i){
-        opCode.push_back(ins[i]);
-    }
-    for(int i = 31-14; i <= 31-12; ++i){
-        func3.push_back(ins[i]);
-    }
-    for(int i = 31-31; i <= 31-25; ++i){
-        func7.push_back(ins[i]);
-    }
-}
-
-void executer(const std::string &opCode, const std::string &func3, const std::string &func7, const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
+void EXE(const std::string &opCode, const std::string &func3, const std::string &func7, const std::string &ins, unsigned reg[], unsigned mem[], unsigned &pos){
     if(opCode == "0110111"){//LUI
         LUI(ins, reg, mem, pos);
     }
@@ -147,21 +122,21 @@ void executer(const std::string &opCode, const std::string &func3, const std::st
         AND(ins, reg, mem, pos);
     }
 }
+ */
 
-
-void run(unsigned pos, unsigned reg[], unsigned mem[]){
+void run(){
     int cnt = 0;
     while(true){
         //std::cout << ++cnt << " : " << std::endl;
 
-        if(mem[pos] == (int)0x0ff00513) break;
-        std::string ins = get_ins(mem[pos]);//取32位01字符串指令;
-        std::string opCode, func3, func7;
-        decode(ins, opCode, func3, func7);//对字符串指令解析,取出opcode,func3,func7;
-        executer(opCode, func3, func7, ins, reg, mem, pos);//执行指令
-        //std::cout << " " << reg[get_rd(ins, 31 - 19, 31 - 15)] << std::endl;
+        if(mem[next_pos] == (int)0x0ff00513) break;
+        order cur(next_pos);
+        cur.order_IF();
+        cur.order_ID();
+        cur.order_EXE();
+        cur.order_MEM();
+        cur.order_WB();
         reg[0] = 0;
-
 
         /*
         if(cnt >= 1 && cnt <= 5000){
@@ -183,8 +158,6 @@ void run(unsigned pos, unsigned reg[], unsigned mem[]){
 
         }
          */
-
-
         }
 
     printf("%u\n",reg[10] & 255u);
