@@ -9,6 +9,7 @@
 //1.WB和ID之间的reg寄存器的数据冲突
 //2.MEM和IF之间的mem内存的数据冲突
 
+
 unsigned reg[32];
 unsigned next_pos = 0;
 unsigned mem[500000];
@@ -18,13 +19,19 @@ public:
     //约定:next_step=None表示尚未进行初始化
     //ins="Pause"表示插入暂停;Pause指令要执行完五个步骤,但是None指令不进行执行,退出后直接从流水中踢出;
     enum next_step{None, IF, ID, EXE, MEM, WB};//Node代表尚未进行初始化;
+    enum ins_type{lui, auipc, jal, jalr, beq, bne, blt, bge, bltu, bgeu,
+                  lb, lh, lw, lbu, lhu, sb, sh, sw, addi, slti, sltiu,
+                  xori, ori, andi, slli, srli, srai, add, sub, sll, slt, sltu,
+                  Xor, srl, sra, Or, And};
     std::string ins;//指令
     std::string func3, func7, opCode;
     next_step nxt;
+    ins_type type;
     int pc, aimRd;
     bool need_MEM = false;
     bool need_WB = false;
     unsigned rd1, rd2, rd; //分别表示reg[rdx1],reg[rdx2],reg[rdx]的值;
+
     order():nxt(None), ins(""), pc(0){}
 
     order(int tmpPC){
@@ -34,6 +41,35 @@ public:
 
     order(const std::string &str){
         ins = str;
+    }
+
+    bool is_control(){
+        //JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU
+        if(opCode == "1101111"){//JAL
+            return 1;
+        }
+        else if(opCode == "1100111" && func3 == "000"){//JALR
+            return 1;
+        }
+        else if(opCode == "1100011" && func3 == "000"){//BEQ
+            return 1;
+        }
+        else if(opCode == "1100011" && func3 == "001"){//BNE
+            return 1;
+        }
+        else if(opCode == "1100011" && func3 == "100"){//BLT
+            return 1;
+        }
+        else if(opCode == "1100011" && func3 == "101"){//BGE
+            return 1;
+        }
+        else if(opCode == "1100011" && func3 == "110") {//BLTU
+            return 1;
+        }
+        else if(opCode == "1100011" && func3 == "111"){//BGEU
+            return 1;
+        }
+        return false;
     }
     
     unsigned Get_Num(int l, int r){
@@ -455,6 +491,7 @@ bool order::order_IF(){
     ins = res;
     nxt = ID;
     next_pos++;
+    reg[0] = 0;
     return true;
 }
 
@@ -480,7 +517,128 @@ bool order::order_ID(){//取出操作码,reg1,reg2,reg,func3,func7;
     rs1 = Get_Num(31 - 19, 31 - 15), rs2 = Get_Num(31 - 24, 31 - 20), aimRd = Get_Num(31 - 11, 31 - 7);
     rd1 = reg[rs1], rd2 = reg[rs2], rd = reg[aimRd];
 
+    if(opCode == "0110111"){//LUI
+        type = lui;
+    }
+    else if(opCode == "0010111"){//AUIPC
+        type = auipc;
+    }
+    else if(opCode == "1101111"){//JAL
+        type = jal;
+    }
+    else if(opCode == "1100111" && func3 == "000"){//JALR
+        type = jalr;
+    }
+    else if(opCode == "1100011" && func3 == "000"){//BEQ
+        type = beq;
+    }
+    else if(opCode == "1100011" && func3 == "001"){//BNE
+        type = bne;
+    }
+    else if(opCode == "1100011" && func3 == "100"){//BLT
+        type = blt;
+    }
+    else if(opCode == "1100011" && func3 == "101"){//BGE
+        type = bge;
+    }
+    else if(opCode == "1100011" && func3 == "110") {//BLTU
+        type = bltu;
+    }
+    else if(opCode == "1100011" && func3 == "111"){//BGEU
+        type = bgeu;
+    }
+    else if(opCode == "0000011" && func3 == "000"){//LB
+        type = lb;
+        need_MEM = true;
+    }
+    else if(opCode == "0000011" && func3 == "001"){//LH
+        type = lh;
+        need_MEM = true;
+    }
+    else if(opCode == "0000011" && func3 == "010"){//LW
+        type = lw;
+        need_MEM = true;
+    }
+    else if(opCode == "0000011" && func3 == "100"){//LBU
+        type = lbu;
+        need_MEM = true;
+    }
+    else if(opCode == "0000011" && func3 == "101"){//LHU
+        type = lhu;
+        need_MEM = true;
+    }
+    else if(opCode == "0100011" && func3 == "000"){//SB
+        type = sb;
+        need_MEM = true;
+    }
+    else if(opCode == "0100011" && func3 == "001"){//SH
+        type = sh;
+        need_MEM = true;
+    }
+    else if(opCode == "0100011" && func3 == "010"){//SW
+        type = sw;
+        need_MEM = true;
+    }
+    else if(opCode == "0010011" && func3 == "000"){//ADDI
+        type = addi;
+    }
+    else if(opCode == "0010011" && func3 == "010"){//SLTI
+        type = slti;
+    }
+    else if(opCode == "0010011" && func3 == "011"){//SLTIU
+        type = sltiu;
+    }
+    else if(opCode == "0010011" && func3 == "100"){//XORI
+        type = xori;
+    }
+    else if(opCode == "0010011" && func3 == "110"){//ORI
+        type = ori;
+    }
+    else if(opCode == "0010011" && func3 == "111"){//ANDI
+        type = andi;
+    }
+    else if(opCode == "0010011" && func3 == "001" && func7 == "0000000"){//SLLI
+        type = slli;
+    }
+    else if(opCode == "0010011" && func3 == "101" && func7 == "0000000"){//SRLI
+        type = srli;
+    }
+    else if(opCode == "0010011" && func3 == "101" && func7 == "0100000"){//SRAI
+        type = srai;
+    }
+    else if(opCode == "0110011" && func3 == "000" && func7 == "0000000"){//ADD
+        type = add;
+    }
+    else if(opCode == "0110011" && func3 == "000" && func7 == "0100000"){//SUB
+        type = sub;
+    }
+    else if(opCode == "0110011" && func3 == "001" && func7 == "0000000"){//SLL
+        type = sll;
+    }
+    else if(opCode == "0110011" && func3 == "010" && func7 == "0000000"){//SLT
+        type = slt;
+    }
+    else if(opCode == "0110011" && func3 == "011" && func7 == "0000000"){//SLTU
+        type = sltu;
+    }
+    else if(opCode == "0110011" && func3 == "100" && func7 == "0000000"){//XOR
+        type = Xor;
+    }
+    else if(opCode == "0110011" && func3 == "101" && func7 == "0000000"){//SRL
+        type = srl;
+    }
+    else if(opCode == "0110011" && func3 == "101" && func7 == "0100000"){//SRA
+        type = sra;
+    }
+    else if(opCode == "0110011" && func3 == "110" && func7 == "0000000"){//OR
+        type = Or;
+    }
+    else if(opCode == "0110011" && func3 == "111" && func7 == "0000000"){//AND
+        type = And;
+    }
+
     nxt = EXE;
+    reg[0] = 0;
     return true;
 }
 
@@ -492,127 +650,96 @@ bool order::order_EXE(){
         nxt = MEM;
         return true;
     }
-    if(opCode == "0110111"){//LUI
+    if(type == lui){//LUI
         LUI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010111"){//AUIPC
+    else if(type == auipc){//AUIPC
         AUIPC(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1101111"){//JAL
+    else if(type == jal){//JAL
         JAL(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100111" && func3 == "000"){//JALR
+    else if(type == jalr){//JALR
         JALR(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100011" && func3 == "000"){//BEQ
+    else if(type == beq){//BEQ
         BEQ(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100011" && func3 == "001"){//BNE
+    else if(type == bne){//BNE
         BNE(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100011" && func3 == "100"){//BLT
+    else if(type == blt){//BLT
         BLT(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100011" && func3 == "101"){//BGE
+    else if(type == bge){//BGE
         BGE(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100011" && func3 == "110") {//BLTU
+    else if(type == bltu) {//BLTU
         BLTU(reg, mem, *this, next_pos);
     }
-    else if(opCode == "1100011" && func3 == "111"){//BGEU
+    else if(type == bgeu){//BGEU
         BGEU(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0000011" && func3 == "000"){//LB
-        //LB(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0000011" && func3 == "001"){//LH
-        //LH(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0000011" && func3 == "010"){//LW
-        //LW(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0000011" && func3 == "100"){//LBU
-        //LBU(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0000011" && func3 == "101"){//LHU
-        //LHU(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0100011" && func3 == "000"){//SB
-        //SB(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0100011" && func3 == "001"){//SH
-        //SH(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0100011" && func3 == "010"){//SW
-        //SW(reg, mem, *this, next_pos);
-        need_MEM = true;
-    }
-    else if(opCode == "0010011" && func3 == "000"){//ADDI
+    else if(type == addi){//ADDI
         ADDI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "010"){//SLTI
+    else if(type == slti){//SLTI
         SLTI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "011"){//SLTIU
+    else if(type == sltiu){//SLTIU
         SLTIU(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "100"){//XORI
+    else if(type == xori){//XORI
         XORI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "110"){//ORI
+    else if(type == ori){//ORI
         ORI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "111"){//ANDI
+    else if(type == andi){//ANDI
         ANDI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "001" && func7 == "0000000"){//SLLI
+    else if(type == slli){//SLLI
         SLLI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "101" && func7 == "0000000"){//SRLI
+    else if(type == srli){//SRLI
         SRLI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0010011" && func3 == "101" && func7 == "0100000"){//SRAI
+    else if(type == srai){//SRAI
         SRAI(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "000" && func7 == "0000000"){//ADD
+    else if(type == add){//ADD
         ADD(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "000" && func7 == "0100000"){//SUB
+    else if(type == sub){//SUB
         SUB(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "001" && func7 == "0000000"){//SLL
+    else if(type == sll){//SLL
         SLL(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "010" && func7 == "0000000"){//SLT
+    else if(type == slt){//SLT
         SLT(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "011" && func7 == "0000000"){//SLTU
+    else if(type == sltu){//SLTU
         SLTU(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "100" && func7 == "0000000"){//XOR
+    else if(type == Xor){//XOR
         XOR(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "101" && func7 == "0000000"){//SRL
+    else if(type == srl){//SRL
         SRL(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "101" && func7 == "0100000"){//SRA
+    else if(type == sra){//SRA
         SRA(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "110" && func7 == "0000000"){//OR
+    else if(type == Or){//OR
         OR(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0110011" && func3 == "111" && func7 == "0000000"){//AND
+    else if(type == And){//AND
         AND(reg, mem, *this, next_pos);
     }
 
     nxt = MEM;
+    reg[0] = 0;
     return true;
 }
 
@@ -629,31 +756,32 @@ bool order::order_MEM(){
         return true;
     }
 
-    if(opCode == "0000011" && func3 == "000"){//LB
+    if(type == lb){//LB
         LB_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0000011" && func3 == "001"){//LH
+    else if(type == lh){//LH
         LH_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0000011" && func3 == "010"){//LW
+    else if(type == lw){//LW
         LW_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0000011" && func3 == "100"){//LBU
+    else if(type == lbu){//LBU
         LBU_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0000011" && func3 == "101"){//LHU
+    else if(type == lhu){//LHU
         LHU_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0100011" && func3 == "000"){//SB
+    else if(type == sb){//SB
         SB_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0100011" && func3 == "001"){//SH
+    else if(type == sh){//SH
         SH_inner(reg, mem, *this, next_pos);
     }
-    else if(opCode == "0100011" && func3 == "010"){//SW
+    else if(type == sw){//SW
         SW_inner(reg, mem, *this, next_pos);
     }
     nxt = WB;
+    reg[0] = 0;
     return true;
 }
 
@@ -668,6 +796,7 @@ bool order::order_WB(){
         return true;
     }
     reg[aimRd] = rd;
+    reg[0] = 0;
     return true;
 }
 
