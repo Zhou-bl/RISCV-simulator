@@ -8,8 +8,8 @@
 using namespace std;
 
 int main(){
-    //freopen("testcases/array_test1.data", "r", stdin);
-    //freopen("master.txt", "w", stdout);
+    //freopen("testcases/tak.data", "r", stdin);
+    //freopen("ans.txt", "w", stdout);
     read_into_mem(mem);
     run();
     //test();

@@ -14,23 +14,31 @@ unsigned reg[32];
 unsigned next_pos = 0;
 unsigned mem[500000];
 
+unsigned get_imm(const std::string &ins, int l, int r){
+    unsigned res = 0;
+    for(int i = l; i <= r; ++i){
+        res = (res << 1) + ins[i] - '0';
+    }
+    return res;
+}
+
 class order{
 public:
     //约定:next_step=None表示尚未进行初始化
     //ins="Pause"表示插入暂停;Pause指令要执行完五个步骤,但是None指令不进行执行,退出后直接从流水中踢出;
     enum next_step{None, IF, ID, EXE, MEM, WB};//Node代表尚未进行初始化;
-    enum ins_type{lui, auipc, jal, jalr, beq, bne, blt, bge, bltu, bgeu,
+    enum ins_type{nop, lui, auipc, jal, jalr, beq, bne, blt, bge, bltu, bgeu,
                   lb, lh, lw, lbu, lhu, sb, sh, sw, addi, slti, sltiu,
                   xori, ori, andi, slli, srli, srai, add, sub, sll, slt, sltu,
                   Xor, srl, sra, Or, And};
     std::string ins;//指令
     std::string func3, func7, opCode;
-    next_step nxt;
-    ins_type type;
-    int pc, aimRd;
+    next_step nxt = None;
+    ins_type type = nop;
+    int pc = 0, aimRd = 0, rs1 = 0, rs2 = 0;
     bool need_MEM = false;
     bool need_WB = false;
-    unsigned rd1, rd2, rd; //分别表示reg[rdx1],reg[rdx2],reg[rdx]的值;
+    unsigned rd1 = 0, rd2 = 0, rd = 0; //分别表示reg[rdx1],reg[rdx2],reg[rdx]的值;
 
     order():nxt(None), ins(""), pc(0){}
 
@@ -41,37 +49,24 @@ public:
 
     order(const std::string &str){
         ins = str;
+        if(str == "Pause"){
+            nxt = IF;
+            type = nop;
+        }
     }
 
     bool is_control(){
         //JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU
-        if(opCode == "1101111"){//JAL
-            return 1;
-        }
-        else if(opCode == "1100111" && func3 == "000"){//JALR
-            return 1;
-        }
-        else if(opCode == "1100011" && func3 == "000"){//BEQ
-            return 1;
-        }
-        else if(opCode == "1100011" && func3 == "001"){//BNE
-            return 1;
-        }
-        else if(opCode == "1100011" && func3 == "100"){//BLT
-            return 1;
-        }
-        else if(opCode == "1100011" && func3 == "101"){//BGE
-            return 1;
-        }
-        else if(opCode == "1100011" && func3 == "110") {//BLTU
-            return 1;
-        }
-        else if(opCode == "1100011" && func3 == "111"){//BGEU
-            return 1;
-        }
-        return false;
+        return type == jal || type == jalr || type == beq || type == bne ||
+               type == blt || type == bge || type == bltu || type == bgeu;
     }
-    
+
+    bool is_load_and_store(){
+        //LB, LH, LW, LBU, LHU, SB, SH, SW
+        return type == lb || type == lh || type == lw || type == lbu ||
+                type == lhu || type == sb || type == sh || type == sw;
+    }
+
     unsigned Get_Num(int l, int r){
         unsigned res = 0;
         for(int i = l; i <= r; ++i){
@@ -90,14 +85,6 @@ public:
     
     bool order_WB();
 };
-
-unsigned get_imm(const std::string &ins, int l, int r){
-    unsigned res = 0;
-    for(int i = l; i <= r; ++i){
-        res = (res << 1) + ins[i] - '0';
-    }
-    return res;
-}
 
 
 unsigned read_one_char(int index, unsigned mem[]){//在index位读一个字节
@@ -182,7 +169,6 @@ void JAL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     off = (off << 10) + get_imm(o.ins, 1, 10);
     off <<= 1;
     o.rd = (o.pc + 1) << 2;
-    o.need_WB = true;
     off = sign_extend(off, 21);
     nxt_pos = ((o.pc << 2) + off) >> 2;
 }
@@ -192,7 +178,6 @@ void JALR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     if(off >> 11) off |= 0xfffff000;
     nxt_pos = ((o.rd1 + off) & (~1)) >> 2;
     o.rd = t;
-    o.need_WB = true;
 }
 
 void BEQ(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
@@ -278,7 +263,6 @@ void LB_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned rans = read_one_char(o.rd1 + off, mem);//8位
     if(rans >> 7) rans |= 0xffffff00;
     o.rd = rans;
-    o.need_WB = true;
 }
 
 void LH_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
@@ -287,7 +271,6 @@ void LH_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned rans = read_two_char(o.rd1 + off, mem);//16位
     if(rans >> 15) rans |= 0xffff0000;
     o.rd = rans;
-    o.need_WB = true;
 }
 
 void LW_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
@@ -295,7 +278,6 @@ void LW_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     if(off >> 11) off |= 0xfffff000;
     unsigned rans = read_four_char(o.rd1 + off, mem);//32位
     o.rd = rans;
-    o.need_WB = true;
 }
 
 void LBU_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
@@ -303,7 +285,6 @@ void LBU_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     if(off >> 11) off |= 0xfffff000;
     unsigned rans = read_one_char(o.rd1 + off, mem);//8位
     o.rd = rans;
-    o.need_WB = true;
 }
 
 void LHU_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
@@ -311,7 +292,6 @@ void LHU_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     if(off >> 11) off |= 0xfffff000;
     unsigned rans = read_two_char(o.rd1 + off, mem);//16位
     o.rd = rans;
-    o.need_WB = true;
 }
 
 void SB_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
@@ -347,13 +327,11 @@ void SW_inner(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
 void LUI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 31 - 31, 31 - 12);
     o.rd = imm << 12;
-    o.need_WB = true;
 }
 
 void AUIPC(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 31 - 31, 31 - 12);
     o.rd = (imm << 12) + (o.pc << 2);
-    o.need_WB = true;
 }
 
 
@@ -361,112 +339,72 @@ void ADDI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 0, 11);//12位
     if(imm >> 11) imm |= 0xfffff000;
     o.rd = imm + o.rd1;
-    o.need_WB = true;
 }
 
 void SLTI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
     o.rd = ((int)o.rd1 < (int)imm);
-    o.need_WB = true;
 }
 
 void SLTIU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
     o.rd = (o.rd1 < imm);
-    o.need_WB = true;
 }
 
 void XORI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
     o.rd = o.rd1 ^ imm;
-    o.need_WB = true;
 }
 
 void ORI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
     o.rd = o.rd1 | imm;
-    o.need_WB = true;
 }
 
 void ANDI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned imm = get_imm(o.ins, 0, 11);
     if(imm >> 11) imm |= 0xfffff000;
     o.rd = o.rd1 & imm;
-    o.need_WB = true;
 }
 
 void SLLI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){////shamt[5] == 0?
     unsigned shamt = get_imm(o.ins, 31 - 25, 31 - 20);
     o.rd = o.rd1 << shamt;
-    o.need_WB = true;
 }
 
 void SRLI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned shamt = get_imm(o.ins, 31 - 25, 31 - 20);
     o.rd = o.rd1 >> shamt;
-    o.need_WB = true;
 }
 
 void SRAI(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
     unsigned shamt = get_imm(o.ins, 31 - 25, 31 - 20);
     o.rd = (int)o.rd1 >> shamt;
-    o.need_WB = true;
 }
 
-void ADD(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 + o.rd2;
-    o.need_WB = true;
-}
+void ADD(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = o.rd1 + o.rd2;}
 
-void SUB(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 - o.rd2;
-    o.need_WB = true;
-}
+void SUB(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = o.rd1 - o.rd2;}
 
-void SLL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 << (o.rd2 & 0x1f);
-    o.need_WB = true;
-}
+void SLL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = o.rd1 << (o.rd2 & 0x1f);}
 
-void SLT(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = (int)o.rd1 < (int)o.rd2 ? 1 : 0;
-    o.need_WB = true;
-}
+void SLT(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = (int)o.rd1 < (int)o.rd2 ? 1 : 0;}
 
-void SLTU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 < o.rd2 ? 1 : 0;
-    o.need_WB = true;
-}
+void SLTU(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = o.rd1 < o.rd2 ? 1 : 0;}
 
-void XOR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 ^ o.rd2;
-    o.need_WB = true;
-}
+void XOR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = o.rd1 ^ o.rd2;}
 
-void SRL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 >> (o.rd2 & 0x1f);
-    o.need_WB = true;
-}
+void SRL(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = o.rd1 >> (o.rd2 & 0x1f);}
 
-void SRA(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = (int)o.rd1 >> (o.rd2 & 0x1f);
-    o.need_WB = true;
-}
+void SRA(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){o.rd = (int)o.rd1 >> (o.rd2 & 0x1f);}
 
-void OR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 | o.rd2;
-    o.need_WB = true;
-}
+void OR(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){ o.rd = o.rd1 | o.rd2;}
 
-void AND(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){
-    o.rd = o.rd1 & o.rd2;
-    o.need_WB = true;
-}
-
+void AND(unsigned reg[], unsigned mem[], order &o, unsigned &nxt_pos){ o.rd = o.rd1 & o.rd2;}
 
 
 
@@ -476,7 +414,7 @@ bool order::order_IF(){
     }
     if(ins == "Pause"){//暂停步骤,视为成功执行;
         nxt = ID;
-        next_pos++;
+        //next_pos++;
         return true;
     }
     std::string res;
@@ -501,6 +439,7 @@ bool order::order_ID(){//取出操作码,reg1,reg2,reg,func3,func7;
     }
     if(ins == "Pause"){
         nxt = EXE;
+        type = nop;
         return true;
     }
     for(int i = 31-6; i <= 31-0; ++i){
@@ -513,21 +452,24 @@ bool order::order_ID(){//取出操作码,reg1,reg2,reg,func3,func7;
         func7.push_back(ins[i]);
     }
 
-    int rs1, rs2;
     rs1 = Get_Num(31 - 19, 31 - 15), rs2 = Get_Num(31 - 24, 31 - 20), aimRd = Get_Num(31 - 11, 31 - 7);
     rd1 = reg[rs1], rd2 = reg[rs2], rd = reg[aimRd];
 
     if(opCode == "0110111"){//LUI
         type = lui;
+        need_WB = true;
     }
     else if(opCode == "0010111"){//AUIPC
         type = auipc;
+        need_WB = true;
     }
     else if(opCode == "1101111"){//JAL
         type = jal;
+        need_WB = true;
     }
     else if(opCode == "1100111" && func3 == "000"){//JALR
         type = jalr;
+        need_WB = true;
     }
     else if(opCode == "1100011" && func3 == "000"){//BEQ
         type = beq;
@@ -550,22 +492,27 @@ bool order::order_ID(){//取出操作码,reg1,reg2,reg,func3,func7;
     else if(opCode == "0000011" && func3 == "000"){//LB
         type = lb;
         need_MEM = true;
+        need_WB = true;
     }
     else if(opCode == "0000011" && func3 == "001"){//LH
         type = lh;
         need_MEM = true;
+        need_WB = true;
     }
     else if(opCode == "0000011" && func3 == "010"){//LW
         type = lw;
         need_MEM = true;
+        need_WB = true;
     }
     else if(opCode == "0000011" && func3 == "100"){//LBU
         type = lbu;
         need_MEM = true;
+        need_WB = true;
     }
     else if(opCode == "0000011" && func3 == "101"){//LHU
         type = lhu;
         need_MEM = true;
+        need_WB = true;
     }
     else if(opCode == "0100011" && func3 == "000"){//SB
         type = sb;
@@ -581,60 +528,79 @@ bool order::order_ID(){//取出操作码,reg1,reg2,reg,func3,func7;
     }
     else if(opCode == "0010011" && func3 == "000"){//ADDI
         type = addi;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "010"){//SLTI
         type = slti;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "011"){//SLTIU
         type = sltiu;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "100"){//XORI
         type = xori;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "110"){//ORI
         type = ori;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "111"){//ANDI
         type = andi;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "001" && func7 == "0000000"){//SLLI
         type = slli;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "101" && func7 == "0000000"){//SRLI
         type = srli;
+        need_WB = true;
     }
     else if(opCode == "0010011" && func3 == "101" && func7 == "0100000"){//SRAI
         type = srai;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "000" && func7 == "0000000"){//ADD
         type = add;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "000" && func7 == "0100000"){//SUB
         type = sub;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "001" && func7 == "0000000"){//SLL
         type = sll;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "010" && func7 == "0000000"){//SLT
         type = slt;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "011" && func7 == "0000000"){//SLTU
         type = sltu;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "100" && func7 == "0000000"){//XOR
         type = Xor;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "101" && func7 == "0000000"){//SRL
         type = srl;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "101" && func7 == "0100000"){//SRA
         type = sra;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "110" && func7 == "0000000"){//OR
         type = Or;
+        need_WB = true;
     }
     else if(opCode == "0110011" && func3 == "111" && func7 == "0000000"){//AND
         type = And;
+        need_WB = true;
     }
 
     nxt = EXE;
@@ -739,6 +705,7 @@ bool order::order_EXE(){
     }
 
     nxt = MEM;
+    if(!aimRd) rd = 0;//reg[0]恒等于0;
     reg[0] = 0;
     return true;
 }
