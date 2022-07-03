@@ -28,16 +28,20 @@ unsigned get_imm(const std::string &ins, int l, int r){
 
 class BHT{
 public:
+    int branch_cnt = 0, right_cnt = 0;
+    bool flag[50][2]; //每个类型都要一个
 
-    bool flag[2] = {0};
-
-    void update_flag(bool x){
-        flag[0] = flag[1];
-        flag[1] = x;
+    BHT(){
+        for(int i = 0; i < 50; ++i) flag[i][0] = flag[i][1] = 0;
     }
 
-    bool is_branch(){
-        return flag[1];
+    void update_flag(int type, bool x){
+        flag[type][0] = flag[type][1];
+        flag[type][1] = x;
+    }
+
+    bool is_branch(int type){
+        return flag[type][1];
     }
 };
 

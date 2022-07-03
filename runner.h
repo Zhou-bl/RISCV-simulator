@@ -120,13 +120,15 @@ void run(){
         if(buffer[2].is_control() && !stop_flag){//检验分支预测是否正确
             //这里注意buffer[2].EXE使得pc指针由buffer[1].IF得到的指针又跳回去了,注意要重新赋回去;
             if(tmp_pos == next_pos){//预测正确
+                bht.right_cnt++;
                 if(fake_stop_flag) stop_flag = 1;
-                bht.flag[1] ? bht.update_flag(1) : bht.update_flag(0);
+                bht.flag[buffer[2].type][1] ? bht.update_flag(buffer[2].type, 1) : bht.update_flag(buffer[2].type, 0);
             }
             else{//预测错误
                 //std::cout << "Wrong !!!" << std::endl;
+                cpu_cycle++;
                 if(fake_stop_flag) fake_stop_flag = 0;
-                bht.flag[1] ? bht.update_flag(0) : bht.update_flag(1);
+                bht.flag[buffer[2].type][1] ? bht.update_flag(buffer[2].type, 0) : bht.update_flag(buffer[2].type, 1);
                 buffer_delete(3); //删掉错误的指令
                 if(another_order.type == order::stop){ //应该是这里提前停止了; 要换一种写法; 之前直接取mem的操作不正确
                     stop_flag = 1;
@@ -145,8 +147,9 @@ void run(){
             buffer_insert(3, order("Pause"));
             insert_flag = 1;
              */
+            bht.branch_cnt++;
             order tmpOrder = buffer[3];
-            if(bht.is_branch() || buffer[3].type == order::jal || buffer[3].type == order::jalr){//如果要跳转
+            if(bht.is_branch(buffer[3].type) || buffer[3].type == order::jal || buffer[3].type == order::jalr){//如果要跳转
                 tmp_pos = tmpOrder.get_tmpPos(); //临时跳转的地址;
                 another_pos = next_pos;
             }
