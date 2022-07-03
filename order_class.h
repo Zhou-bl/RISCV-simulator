@@ -9,10 +9,14 @@
 //1.WB和ID之间的reg寄存器的数据冲突
 //2.MEM和IF之间的mem内存的数据冲突
 
+long long cpu_cycle = 0;
 
 unsigned reg[32];
 unsigned next_pos = 0;
+unsigned tmp_pos = 0;
 unsigned mem[500000];
+
+
 
 unsigned get_imm(const std::string &ins, int l, int r){
     unsigned res = 0;
@@ -22,6 +26,21 @@ unsigned get_imm(const std::string &ins, int l, int r){
     return res;
 }
 
+class BHT{
+public:
+
+    bool flag[2] = {0};
+
+    void update_flag(bool x){
+        flag[0] = flag[1];
+        flag[1] = x;
+    }
+
+    bool is_branch(){
+        return flag[1];
+    }
+};
+
 class order{
 public:
     //约定:next_step=None表示尚未进行初始化
@@ -30,7 +49,7 @@ public:
     enum ins_type{nop, lui, auipc, jal, jalr, beq, bne, blt, bge, bltu, bgeu,
                   lb, lh, lw, lbu, lhu, sb, sh, sw, addi, slti, sltiu,
                   xori, ori, andi, slli, srli, srai, add, sub, sll, slt, sltu,
-                  Xor, srl, sra, Or, And};
+                  Xor, srl, sra, Or, And, stop};
     std::string ins;//指令
     std::string func3, func7, opCode;
     next_step nxt = None;
@@ -52,6 +71,9 @@ public:
         if(str == "Pause"){
             nxt = IF;
             type = nop;
+        }
+        if(str == "Stop"){
+            type = stop;
         }
     }
 
@@ -84,6 +106,8 @@ public:
     bool order_MEM();
     
     bool order_WB();
+
+    unsigned get_tmpPos();
 };
 
 
@@ -616,93 +640,35 @@ bool order::order_EXE(){
         nxt = MEM;
         return true;
     }
-    if(type == lui){//LUI
-        LUI(reg, mem, *this, next_pos);
-    }
-    else if(type == auipc){//AUIPC
-        AUIPC(reg, mem, *this, next_pos);
-    }
-    else if(type == jal){//JAL
-        JAL(reg, mem, *this, next_pos);
-    }
-    else if(type == jalr){//JALR
-        JALR(reg, mem, *this, next_pos);
-    }
-    else if(type == beq){//BEQ
-        BEQ(reg, mem, *this, next_pos);
-    }
-    else if(type == bne){//BNE
-        BNE(reg, mem, *this, next_pos);
-    }
-    else if(type == blt){//BLT
-        BLT(reg, mem, *this, next_pos);
-    }
-    else if(type == bge){//BGE
-        BGE(reg, mem, *this, next_pos);
-    }
-    else if(type == bltu) {//BLTU
-        BLTU(reg, mem, *this, next_pos);
-    }
-    else if(type == bgeu){//BGEU
-        BGEU(reg, mem, *this, next_pos);
-    }
-    else if(type == addi){//ADDI
-        ADDI(reg, mem, *this, next_pos);
-    }
-    else if(type == slti){//SLTI
-        SLTI(reg, mem, *this, next_pos);
-    }
-    else if(type == sltiu){//SLTIU
-        SLTIU(reg, mem, *this, next_pos);
-    }
-    else if(type == xori){//XORI
-        XORI(reg, mem, *this, next_pos);
-    }
-    else if(type == ori){//ORI
-        ORI(reg, mem, *this, next_pos);
-    }
-    else if(type == andi){//ANDI
-        ANDI(reg, mem, *this, next_pos);
-    }
-    else if(type == slli){//SLLI
-        SLLI(reg, mem, *this, next_pos);
-    }
-    else if(type == srli){//SRLI
-        SRLI(reg, mem, *this, next_pos);
-    }
-    else if(type == srai){//SRAI
-        SRAI(reg, mem, *this, next_pos);
-    }
-    else if(type == add){//ADD
-        ADD(reg, mem, *this, next_pos);
-    }
-    else if(type == sub){//SUB
-        SUB(reg, mem, *this, next_pos);
-    }
-    else if(type == sll){//SLL
-        SLL(reg, mem, *this, next_pos);
-    }
-    else if(type == slt){//SLT
-        SLT(reg, mem, *this, next_pos);
-    }
-    else if(type == sltu){//SLTU
-        SLTU(reg, mem, *this, next_pos);
-    }
-    else if(type == Xor){//XOR
-        XOR(reg, mem, *this, next_pos);
-    }
-    else if(type == srl){//SRL
-        SRL(reg, mem, *this, next_pos);
-    }
-    else if(type == sra){//SRA
-        SRA(reg, mem, *this, next_pos);
-    }
-    else if(type == Or){//OR
-        OR(reg, mem, *this, next_pos);
-    }
-    else if(type == And){//AND
-        AND(reg, mem, *this, next_pos);
-    }
+    if(type == lui){LUI(reg, mem, *this, next_pos);}
+    else if(type == auipc){AUIPC(reg, mem, *this, next_pos);}
+    else if(type == jal){JAL(reg, mem, *this, next_pos);}
+    else if(type == jalr){JALR(reg, mem, *this, next_pos);}
+    else if(type == beq){BEQ(reg, mem, *this, next_pos);}
+    else if(type == bne){BNE(reg, mem, *this, next_pos);}
+    else if(type == blt){BLT(reg, mem, *this, next_pos);}
+    else if(type == bge){BGE(reg, mem, *this, next_pos);}
+    else if(type == bltu) {BLTU(reg, mem, *this, next_pos);}
+    else if(type == bgeu){BGEU(reg, mem, *this, next_pos);}
+    else if(type == addi){ADDI(reg, mem, *this, next_pos);}
+    else if(type == slti){SLTI(reg, mem, *this, next_pos);}
+    else if(type == sltiu){SLTIU(reg, mem, *this, next_pos);}
+    else if(type == xori){XORI(reg, mem, *this, next_pos);}
+    else if(type == ori){ORI(reg, mem, *this, next_pos);}
+    else if(type == andi){ANDI(reg, mem, *this, next_pos);}
+    else if(type == slli){SLLI(reg, mem, *this, next_pos);}
+    else if(type == srli){SRLI(reg, mem, *this, next_pos);}
+    else if(type == srai){SRAI(reg, mem, *this, next_pos);}
+    else if(type == add){ADD(reg, mem, *this, next_pos);}
+    else if(type == sub){SUB(reg, mem, *this, next_pos);}
+    else if(type == sll){SLL(reg, mem, *this, next_pos);}
+    else if(type == slt){SLT(reg, mem, *this, next_pos);}
+    else if(type == sltu){SLTU(reg, mem, *this, next_pos);}
+    else if(type == Xor){XOR(reg, mem, *this, next_pos);}
+    else if(type == srl){SRL(reg, mem, *this, next_pos);}
+    else if(type == sra){SRA(reg, mem, *this, next_pos);}
+    else if(type == Or){OR(reg, mem, *this, next_pos);}
+    else if(type == And){AND(reg, mem, *this, next_pos);}
 
     nxt = MEM;
     if(!aimRd) rd = 0;//reg[0]恒等于0;
@@ -722,7 +688,7 @@ bool order::order_MEM(){
         nxt = WB;
         return true;
     }
-
+    cpu_cycle += 2;
     if(type == lb){//LB
         LB_inner(reg, mem, *this, next_pos);
     }
@@ -765,6 +731,81 @@ bool order::order_WB(){
     reg[aimRd] = rd;
     reg[0] = 0;
     return true;
+}
+
+unsigned order::get_tmpPos(){
+    unsigned res = 0;
+    if(type == jal){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 8) + get_imm(ins, 31 - 19,  31- 12);
+        off = (off << 1) + get_imm(ins, 31 - 20, 31 - 20);
+        off = (off << 10) + get_imm(ins, 1, 10);
+        off <<= 1;
+        rd = (pc + 1) << 2;
+        off = sign_extend(off, 21);
+        res = ((pc << 2) + off) >> 2;
+    }
+    else if(type == jalr){
+        unsigned t = (pc + 1) << 2, off = get_imm(ins, 0, 11);
+        if(off >> 11) off |= 0xfffff000;
+        res = ((rd1 + off) & (~1)) >> 2;
+        rd = t;
+    }
+    else if(type == beq){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(ins, 1, 6);
+        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+        off <<= 1;
+        if(off >> 12) off |= 0xffffe000;
+        res = ((pc << 2) + off) >> 2;
+    }
+    else if(type == bne){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(ins, 1, 6);
+        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+        off <<= 1;
+        if(off >> 12) off |= 0xffffe000;
+        res = ((pc << 2) + off) >> 2;
+    }
+    else if(type == blt){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(ins, 1, 6);
+        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+        off <<= 1;
+        if(off >> 12) off |= 0xffffe000;
+        res = ((pc << 2) + off) >> 2;
+    }
+    else if(type == bge){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(ins, 1, 6);
+        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+        off <<= 1;
+        if(off >> 12) off |= 0xffffe000;
+        res = ((pc << 2) + off) >> 2;
+    }
+    else if(type == bltu){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(ins, 1, 6);
+        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+        off <<= 1;
+        if(off >> 12) off |= 0xffffe000;
+        res = ((pc << 2) + off) >> 2;
+    }
+    else if(type == bgeu){
+        unsigned off = get_imm(ins, 0, 0);
+        off = (off << 1) + get_imm(ins, 31 - 7, 31 - 7);
+        off = (off << 6) + get_imm(ins, 1, 6);
+        off = (off << 4) + get_imm(ins, 31 - 11, 31 - 8);
+        off <<= 1;
+        if(off >> 12) off |= 0xffffe000;
+        res = ((pc << 2) + off) >> 2;
+    }
+    return res;
 }
 
 #endif //RISCV_PROJECT_ORDER_CLASS_H
